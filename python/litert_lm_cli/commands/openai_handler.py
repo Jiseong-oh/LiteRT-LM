@@ -23,13 +23,14 @@ from __future__ import annotations
 
 import abc
 import base64
+from collections.abc import Mapping, Sequence
 import dataclasses
 import datetime
 import http.server
 import json
 import os
 import traceback
-from typing import Any
+from typing import Any, override
 import urllib.request
 
 import click
@@ -97,7 +98,7 @@ class _OpenAIStreamFormatter(abc.ABC):
     """Formats a delta event with new text output."""
 
   @abc.abstractmethod
-  def format_complete(self) -> bytes:
+  def format_complete(self, finish_reason: str = "stop") -> bytes:
     """Formats the completion event."""
 
   def format_error(self, error: Exception) -> bytes:
@@ -153,7 +154,49 @@ class _OpenAIChatCompletionsFormatter(_OpenAIStreamFormatter):
         })
     )
 
-  def format_complete(self) -> bytes:
+  def format_tool_call_delta(
+      self, tool_calls: Sequence[Mapping[str, Any]]
+  ) -> bytes:
+    """Formats a delta chunk with tool calls.
+
+    Args:
+      tool_calls: A sequence of tool calls returned by the model, where each
+        tool call is a mapping containing 'function' details.
+
+    Returns:
+      A Server-Sent Event (SSE) message containing the formatted tool calls.
+    """
+    openai_tool_calls = [
+        {
+            "index": i,
+            "id": f"call_{self._now_str}_{i}",
+            "type": "function",
+            "function": {
+                "name": tc.get("function", {}).get("name"),
+                "arguments": json.dumps(
+                    tc.get("function", {}).get("arguments", {})
+                ),
+            },
+        }
+        for i, tc in enumerate(tool_calls)
+    ]
+
+    return _sse_data(
+        _dump_json({
+            "id": self._chunk_id,
+            "object": "chat.completion.chunk",
+            "created": self._created_ts,
+            "model": self._model_id,
+            "choices": [{
+                "index": 0,
+                "delta": {"tool_calls": openai_tool_calls},
+                "finish_reason": None,
+            }],
+        })
+    )
+
+  @override
+  def format_complete(self, finish_reason: str = "stop") -> bytes:
     """Formats the final chunk indicating completion."""
     return _sse_data(
         _dump_json({
@@ -164,7 +207,7 @@ class _OpenAIChatCompletionsFormatter(_OpenAIStreamFormatter):
             "choices": [{
                 "index": 0,
                 "delta": {},
-                "finish_reason": "stop",
+                "finish_reason": finish_reason,
             }],
         })
     )
@@ -191,8 +234,10 @@ class _OpenAIV1ResponsesFormatter(_OpenAIStreamFormatter):
         event="response.output_text.delta",
     )
 
-  def format_complete(self) -> bytes:
+  @override
+  def format_complete(self, finish_reason: str = "stop") -> bytes:
     """Formats the response.completed event."""
+    del finish_reason
     return _sse_data(
         _dump_json({"id": self._resp_id, "status": "completed"}),
         event="response.completed",
@@ -246,6 +291,14 @@ class OpenAIResponse:
   output: list[ResponseOutput]
 
 
+def _parse_tool_arguments(args_str: str) -> dict[str, Any]:
+  """Parses a JSON string of arguments into a dictionary, returning empty dict on error."""
+  try:
+    return json.loads(args_str)
+  except json.JSONDecodeError:
+    return {}
+
+
 def _translate_openai_message(msg: Any) -> dict[str, Any]:
   """Translates an OpenAI message to a LiteRT-LM message format.
 
@@ -291,6 +344,36 @@ def _translate_openai_message(msg: Any) -> dict[str, Any]:
 
   role = msg.get("role")
   content = msg.get("content")
+
+  if role == "tool":
+    return {
+        "role": "tool",
+        "content": [{
+            "type": "tool_response",
+            "name": msg.get("name"),
+            "response": content,
+        }],
+    }
+
+  if role == "assistant" and "tool_calls" in msg:
+    openai_tool_calls = msg.get("tool_calls", [])
+    litert_tool_calls = [
+        {
+            "type": "function",
+            "function": {
+                "name": tc.get("function", {}).get("name"),
+                "arguments": _parse_tool_arguments(
+                    tc.get("function", {}).get("arguments", "{}")
+                ),
+            },
+        }
+        for tc in openai_tool_calls
+    ]
+    return {
+        "role": "assistant",
+        "tool_calls": litert_tool_calls,
+        **({"content": content} if content else {}),
+    }
 
   if not isinstance(content, list):
     return msg
@@ -363,6 +446,27 @@ def _translate_openai_message(msg: Any) -> dict[str, Any]:
   }
 
 
+@dataclasses.dataclass
+class _ProxyTool(litert_lm.Tool):
+  """A proxy tool for OpenAPI definitions without implementation.
+
+  Attributes:
+    definition: A dictionary representing the OpenAPI tool definition.
+  """
+
+  definition: dict[str, Any]
+
+  @override
+  def get_tool_description(self) -> dict[str, Any]:
+    """See base class."""
+    return self.definition
+
+  @override
+  def execute(self, param: Any) -> Any:
+    """Raises NotImplementedError as proxy tools are not executable."""
+    raise NotImplementedError("Proxy tools are not executable.")
+
+
 class OpenAIHandler(http.server.BaseHTTPRequestHandler):
   """Handler for OpenAI API requests.
 
@@ -410,6 +514,7 @@ class OpenAIHandler(http.server.BaseHTTPRequestHandler):
       self.wfile.write(formatter.format_initial())
       self.wfile.flush()
 
+      has_tool_calls = False
       for chunk in conv.send_message_async(prompt):
         text_output = "".join(
             item.get("text", "")
@@ -420,7 +525,15 @@ class OpenAIHandler(http.server.BaseHTTPRequestHandler):
           self.wfile.write(formatter.format_delta(text_output))
           self.wfile.flush()
 
-      self.wfile.write(formatter.format_complete())
+        tool_calls = chunk.get("tool_calls", [])
+        if tool_calls:
+          has_tool_calls = True
+          if hasattr(formatter, "format_tool_call_delta"):
+            self.wfile.write(formatter.format_tool_call_delta(tool_calls))
+            self.wfile.flush()
+
+      finish_reason = "tool_calls" if has_tool_calls else "stop"
+      self.wfile.write(formatter.format_complete(finish_reason=finish_reason))
       self.wfile.flush()
       self.wfile.write(formatter.format_final())
       self.wfile.flush()
@@ -477,6 +590,22 @@ class OpenAIHandler(http.server.BaseHTTPRequestHandler):
           for item in response.get("content", [])
           if item.get("type") == "text"
       )
+
+      tool_calls = response.get("tool_calls", [])
+      openai_tool_calls = [
+          {
+              "id": f"call_{now_str}_{i}",
+              "type": "function",
+              "function": {
+                  "name": tc.get("function", {}).get("name"),
+                  "arguments": json.dumps(
+                      tc.get("function", {}).get("arguments", {})
+                  ),
+              },
+          }
+          for i, tc in enumerate(tool_calls)
+      ]
+
       resp_body = {
           "id": f"chatcmpl_{now_str}",
           "object": "chat.completion",
@@ -486,9 +615,14 @@ class OpenAIHandler(http.server.BaseHTTPRequestHandler):
               "index": 0,
               "message": {
                   "role": "assistant",
-                  "content": text_output,
+                  "content": text_output or None,
+                  **(
+                      {"tool_calls": openai_tool_calls}
+                      if openai_tool_calls
+                      else {}
+                  ),
               },
-              "finish_reason": "stop",
+              "finish_reason": "tool_calls" if openai_tool_calls else "stop",
           }],
       }
       setattr(self, "_headers_sent", True)
@@ -777,10 +911,19 @@ class OpenAIHandler(http.server.BaseHTTPRequestHandler):
       )
       return
 
+    # Parse tools if this is a chat completions request.
+    tools_data = body.get("tools")
+    tools = (
+        [_ProxyTool(t) for t in tools_data if t.get("type") == "function"]
+        if tools_data
+        else []
+    )
+
     try:
       context_messages = translated_messages[:-1] if translated_messages else []
       with engine.create_conversation(
           messages=context_messages,
+          tools=tools or None,
           automatic_tool_calling=False,
           sampler_config=sampler_config,
       ) as conv:
