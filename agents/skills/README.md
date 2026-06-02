@@ -1,17 +1,19 @@
-# LiteRT-LM Android Demo App Skill
+# LiteRT-LM Agent Skills
 
-This directory contains a specialized agent skill that guides AI developers to
-successfully implement, build, and package a standalone
-**LiteRT-LM Android demo application** from scratch on the first pass.
+This directory contains specialized agent skills that guide AI developers to
+successfully orchestrate, implement, and verify complex development tasks in the
+LiteRT-LM ecosystem.
 
 ## Installation
 
-To register and automatically load this skill in your agent sessions:
+To register and automatically load any of these skills in your agent sessions:
 
 1.  **Locate your agent's skills directory** (the folder where your agent loads
     custom instructions or skills).
-2.  **Copy the entire `create-litert-lm-android-demo-app` folder** directly into
-    that skills directory:
+
+2.  **Copy the desired skill folder**
+    (e.g., `create-litert-lm-android-demo-app`) from this directory into that
+    skills directory:
 
     ```bash
     # Replace the destination path with your active agent skills directory
@@ -21,6 +23,12 @@ To register and automatically load this skill in your agent sessions:
 3.  Once copied, the agent will automatically detect and load the skill when
     resolving related user requests.
 
+## Available Skills
+
+*   **`create-litert-lm-android-demo-app`**: Guides the agent to implement,
+    build, and package a standalone LiteRT-LM Android demo application with
+    backend selection and multi-modality support using Bazel 9.
+
 ## Usage
 
 To trigger a skill, instruct the agent under your active session with a prompt
@@ -28,6 +36,9 @@ specifying the parameters of the target task. The agent will recognize the
 matching skill files and automatically follow the defined execution process.
 
 ### Example Prompt (LiteRT-LM Android Demo App)
+
+To execute the specific LiteRT-LM Android demo application creation skill, use
+this trigger prompt format:
 
 ```text
 Please create a LiteRT-LM Android demo app
