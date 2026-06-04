@@ -249,6 +249,13 @@ LITERT_LM_C_API_EXPORT
 void litert_lm_conversation_optional_args_set_visual_token_budget(
     LiteRtLmConversationOptionalArgs* optional_args, int visual_token_budget);
 
+// Sets the maximum number of output tokens for the conversation optional args.
+// @param optional_args The optional args to modify.
+// @param max_output_tokens The maximum number of output tokens.
+LITERT_LM_C_API_EXPORT
+void litert_lm_conversation_optional_args_set_max_output_tokens(
+    LiteRtLmConversationOptionalArgs* optional_args, int max_output_tokens);
+
 // Sets the minimum log level for the LiteRT LM library.
 // Log levels are: 0=VERBOSE, 1=DEBUG, 2=INFO, 3=WARNING, 4=ERROR, 5=FATAL,
 // 1000=SILENT.

@@ -44,6 +44,11 @@ struct LiteRtLmSessionConfig {
   std::unique_ptr<SessionConfig> config;
 };
 
+struct LiteRtLmConversationOptionalArgs {
+  std::optional<int> visual_token_budget;
+  std::optional<int> max_output_tokens;
+};
+
 struct LiteRtLmConversationConfig {
   std::optional<SessionConfig> session_config;
   std::string system_message_json;
@@ -1674,4 +1679,52 @@ TEST(EngineCTest, TextScoringVerifyTokenLengths) {
   EXPECT_TRUE(litert_lm_responses_has_token_length_at(responses.get(), 0));
   EXPECT_GT(litert_lm_responses_get_token_length_at(responses.get(), 0), 0);
 }
+
+TEST(EngineCTest, ConversationOptionalArgsTest) {
+  const std::string task_path = GetTestdataPath(
+      "litert_lm/runtime/testdata/test_lm.litertlm");
+
+  EngineSettingsPtr settings(
+      litert_lm_engine_settings_create(task_path.c_str(), "cpu",
+                                       /* vision_backend_str */ nullptr,
+                                       /* audio_backend_str */ nullptr),
+      &litert_lm_engine_settings_delete);
+  ASSERT_NE(settings, nullptr);
+  litert_lm_engine_settings_set_max_num_tokens(settings.get(), 16);
+
+  EnginePtr engine(litert_lm_engine_create(settings.get()),
+                   &litert_lm_engine_delete);
+  ASSERT_NE(engine, nullptr);
+
+  ConversationPtr conversation(
+      litert_lm_conversation_create(engine.get(),
+                                    /*conversation_config=*/nullptr),
+      &litert_lm_conversation_delete);
+  ASSERT_NE(conversation, nullptr);
+
+  OptionalArgsPtr optional_args(litert_lm_conversation_optional_args_create(),
+                                &litert_lm_conversation_optional_args_delete);
+  ASSERT_NE(optional_args, nullptr);
+  litert_lm_conversation_optional_args_set_max_output_tokens(
+      optional_args.get(), 1);
+
+  const char* message_json =
+      R"({"role": "user", "content": [{"type": "text", "text": "Hello"}]})";
+  JsonResponsePtr response(litert_lm_conversation_send_message(
+                               conversation.get(), message_json,
+                               /*extra_context=*/nullptr, optional_args.get()),
+                           &litert_lm_json_response_delete);
+  ASSERT_NE(response, nullptr);
+
+  const char* response_str = litert_lm_json_response_get_string(response.get());
+  ASSERT_NE(response_str, nullptr);
+  EXPECT_GT(strlen(response_str), 0);
+  // Since max_output_tokens is 1, the response should be very short.
+  auto response_json = nlohmann::ordered_json::parse(response_str);
+  std::string text = response_json["content"][0]["text"];
+  EXPECT_GT(text.length(), 0);
+  EXPECT_LT(text.length(), 5);
+  EXPECT_EQ(text, "\xE3\x81\xA9");
+}
+
 }  // namespace
