@@ -349,11 +349,10 @@ class LlmLiteRtCompiledModelExecutorBase : public LlmExecutor {
   // Whether the executor needs to prepare the kvcache buffers before execution.
   bool force_prepare_needed_ = false;
 
-  // Sampler for internal sampling.
+  // Sampler for sampling logits.
+  // For now, only CPU sampler is supported.
   std::unique_ptr<Sampler> sampler_;
-  int gpu_sampler_max_top_k_ = 0;
   bool sampler_handles_input_ = true;
-
   // Extra input tensors to swap for decode when sampler handles input tensors.
   TensorBuffer decode_prev_input_pos_;
   TensorBuffer decode_prev_mask_;

@@ -1352,18 +1352,11 @@ absl::Status LlmLiteRtCompiledModelExecutorBase::InitializeSampler(
     output_heads = llm_context_->runtime_config().output_heads.value();
   }
   proto::SamplerParameters sampler_params;
-  if (llm_context_->runtime_config().sampler_params.has_value()) {
-    sampler_params = llm_context_->runtime_config().sampler_params.value();
-  } else {
-    sampler_params.set_type(proto::SamplerParameters::TOP_P);
-    sampler_params.set_k(1);
-    sampler_params.set_p(0.0f);
-    sampler_params.set_temperature(1.0f);
-    sampler_params.set_seed(0);
-  }
-
-  gpu_sampler_max_top_k_ = sampler_params.k();
-
+  sampler_params.set_type(proto::SamplerParameters::TOP_P);
+  sampler_params.set_k(1);
+  sampler_params.set_p(0.0f);
+  sampler_params.set_temperature(1.0f);
+  sampler_params.set_seed(0);
   ASSIGN_OR_RETURN(
       sampler_,
       CreateSampler(sampler_backend, output_heads, std::move(sampler_params),
