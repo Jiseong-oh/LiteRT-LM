@@ -262,6 +262,7 @@ jobs:
         run: |
           bazelisk build --disk_cache=~/.cache/bazel --config=linux_x86_64 \
             --define=litert_link_capi_so=true \
+            --define=litert_runtime_link_mode=dynamic \
             --define=resolve_symbols_in_exec=false \
             //runtime/engine:litert_lm_main
 
@@ -279,7 +280,8 @@ jobs:
                       -e LiteRtGetNumModelSignatures -e LiteRtGetModelSignature \
                       -e LiteRtGetSignatureKey -e LiteRtGetSignatureOutputTensor \
                       -e LiteRtGetQuantizationTypeId -e LiteRtGetPerTensorQuantization \
-                      -e TensorBufferRequirements
+                      -e LiteRtGetTensorBufferRegistry -e LiteRtRegisterTensorBufferHandlers \
+                      -e "LiteRtLmGemmaModelConstraintProvider_*" -e TensorBufferRequirements
 
       - name: Remove cache if cache is being refreshed.
         if: env.REFRESH_CACHE == 'true'

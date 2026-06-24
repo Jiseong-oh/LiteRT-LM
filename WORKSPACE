@@ -2,10 +2,10 @@
 
 workspace(name = "litert_lm")
 
-# UPDATED = 2026-06-18
-LITERT_REF = "8b4a65581d100c32102d6e867403a55e37321aad"
+# UPDATED = 2026-06-23
+LITERT_REF = "51d574b47178d1a0395e842150e5c8077459aa23"
 
-LITERT_SHA256 = "4417b2952ca91d7e3e4817dff12eb79cdda12b9e68fb686b0ac3d849a0d35634"
+LITERT_SHA256 = "8a20f56740d1a9ddaf57fb99e1211eefdd0aaed3e5ce5eb0944ffa158adffdb6"
 
 TENSORFLOW_REF = "228ee1c9263961e8e21e3e30a5132405a7c84cf0"
 
@@ -378,6 +378,8 @@ http_archive(
     patch_cmds = [
         # Replace @//third_party with @litert//third_party in files under third_party/.
         "sed -i -e 's|\"@//third_party/|\"@litert//third_party/|g' third_party/*/*",
+        # Replace @stblib with @stb://stblib in support/*/BUILD files.
+        "sed -i -e 's|\"@stblib\"|\"@stb//:stblib\"|g' support/*/BUILD",
     ],
     sha256 = LITERT_SHA256,
     strip_prefix = "LiteRT-" + LITERT_REF,

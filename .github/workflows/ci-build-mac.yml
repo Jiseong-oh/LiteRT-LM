@@ -123,6 +123,7 @@ jobs:
           bazel build --disk_cache=~/.cache/bazel-macos-dylib \
             --config=macos_arm64 \
             --define=litert_link_capi_so=true \
+            --define=litert_runtime_link_mode=dynamic \
             --define=resolve_symbols_in_exec=false \
             //runtime/engine:litert_lm_main
 
@@ -131,6 +132,7 @@ jobs:
           bazel test --disk_cache=~/.cache/bazel-macos-dylib \
             --config=macos_arm64 \
             --define=litert_link_capi_so=true \
+            --define=litert_runtime_link_mode=dynamic \
             --define=resolve_symbols_in_exec=false \
             --test_output=errors \
             //runtime/... \
@@ -161,6 +163,7 @@ jobs:
       #       --cpu=ios_arm64 \
       #       --ios_multi_cpus=arm64 \
       #       --define=litert_link_capi_so=true \
+      #       --define=litert_runtime_link_mode=dynamic \
       #       --define=resolve_symbols_in_exec=false \
       #       //runtime/engine:litert_lm_main
 
